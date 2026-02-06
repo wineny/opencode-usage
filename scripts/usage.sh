@@ -1,26 +1,50 @@
 #!/usr/bin/env bash
-# usage.sh — Claude API usage (5H/7D rate limit) + OpenCode session stats
+# usage.sh — Claude API usage (5H/7D rate limit) + account info
 
 set -euo pipefail
 
 AUTH_FILE="$HOME/.local/share/opencode/auth.json"
 KEYCHAIN_SERVICE="Claude Code-credentials"
 
-# ── Dependency check ──────────────────────────────────────────
-if ! command -v jq &>/dev/null; then
-  echo "jq가 필요합니다. brew install jq 실행하세요."
-  exit 1
-fi
+# ── JSON parser: python3 (macOS built-in) or jq ──────────────
+json_get() {
+  local json="$1" path="$2"
+  if command -v python3 &>/dev/null; then
+    python3 -c "
+import json,sys
+try:
+  d=json.loads(sys.stdin.read())
+  keys='$path'.split('.')
+  for k in keys:
+    if not isinstance(d,dict) or k not in d: sys.exit(0)
+    d=d[k]
+  if d is None: sys.exit(0)
+  print(d)
+except: pass
+" <<< "$json"
+  elif command -v jq &>/dev/null; then
+    echo "$json" | jq -r ".$path // empty" 2>/dev/null
+  else
+    echo "python3 또는 jq가 필요합니다." >&2
+    exit 1
+  fi
+}
+
+json_has() {
+  local json="$1" path="$2"
+  local val=$(json_get "$json" "$path")
+  [[ -n "$val" ]]
+}
 
 # ── OAuth token: try OpenCode auth.json first, then Keychain ──
 TOKEN=""
 if [[ -f "$AUTH_FILE" ]]; then
-  TOKEN=$(jq -r '.anthropic.access // empty' "$AUTH_FILE" 2>/dev/null)
+  TOKEN=$(json_get "$(cat "$AUTH_FILE")" "anthropic.access")
 fi
 if [[ -z "$TOKEN" ]]; then
   CRED_JSON=$(security find-generic-password -s "$KEYCHAIN_SERVICE" -w 2>/dev/null) || true
   if [[ -n "$CRED_JSON" ]]; then
-    TOKEN=$(echo "$CRED_JSON" | jq -r '.claudeAiOauth.accessToken // empty' 2>/dev/null)
+    TOKEN=$(json_get "$CRED_JSON" "claudeAiOauth.accessToken")
   fi
 fi
 if [[ -z "$TOKEN" ]]; then
@@ -28,7 +52,7 @@ if [[ -z "$TOKEN" ]]; then
   exit 1
 fi
 
-# ── Parallel fetch: usage API + profile API + opencode stats ──
+# ── Parallel fetch: usage API + profile API ───────────────────
 TMPDIR_USAGE=$(mktemp -d)
 trap 'rm -rf "$TMPDIR_USAGE"' EXIT
 
@@ -43,7 +67,7 @@ wait
 # ── Parse usage ───────────────────────────────────────────────
 API_RESPONSE=$(cat "$TMPDIR_USAGE/usage.json" 2>/dev/null)
 API_OK=true
-if [[ -z "$API_RESPONSE" ]] || ! echo "$API_RESPONSE" | jq -e '.five_hour' &>/dev/null; then
+if ! json_has "$API_RESPONSE" "five_hour"; then
   API_OK=false
 fi
 
@@ -63,20 +87,22 @@ relative_time() {
 }
 
 if $API_OK; then
-  FIVE_H_PCT=$(echo "$API_RESPONSE" | jq -r '.five_hour.utilization // 0 | floor')
-  FIVE_H_RESET=$(relative_time "$(echo "$API_RESPONSE" | jq -r '.five_hour.resets_at // empty')")
-  SEVEN_D_PCT=$(echo "$API_RESPONSE" | jq -r '.seven_day.utilization // 0 | floor')
-  SEVEN_D_RESET=$(relative_time "$(echo "$API_RESPONSE" | jq -r '.seven_day.resets_at // empty')")
+  FIVE_H_UTIL=$(json_get "$API_RESPONSE" "five_hour.utilization")
+  FIVE_H_PCT=${FIVE_H_UTIL%.*}
+  FIVE_H_RESET=$(relative_time "$(json_get "$API_RESPONSE" "five_hour.resets_at")")
+  SEVEN_D_UTIL=$(json_get "$API_RESPONSE" "seven_day.utilization")
+  SEVEN_D_PCT=${SEVEN_D_UTIL%.*}
+  SEVEN_D_RESET=$(relative_time "$(json_get "$API_RESPONSE" "seven_day.resets_at")")
 fi
 
 # ── Parse profile ─────────────────────────────────────────────
 PROFILE_RESPONSE=$(cat "$TMPDIR_USAGE/profile.json" 2>/dev/null)
 ACCOUNT_EMAIL=""
 PLAN_LABEL=""
-if echo "$PROFILE_RESPONSE" | jq -e '.account' &>/dev/null 2>&1; then
-  ACCOUNT_EMAIL=$(echo "$PROFILE_RESPONSE" | jq -r '.account.email // empty')
-  ORG_TYPE=$(echo "$PROFILE_RESPONSE" | jq -r '.organization.organization_type // empty')
-  RATE_TIER=$(echo "$PROFILE_RESPONSE" | jq -r '.organization.rate_limit_tier // empty')
+if json_has "$PROFILE_RESPONSE" "account"; then
+  ACCOUNT_EMAIL=$(json_get "$PROFILE_RESPONSE" "account.email")
+  ORG_TYPE=$(json_get "$PROFILE_RESPONSE" "organization.organization_type")
+  RATE_TIER=$(json_get "$PROFILE_RESPONSE" "organization.rate_limit_tier")
   TIER_SUFFIX=$(echo "$RATE_TIER" | grep -oE '[0-9]+x$' || true)
   case "$ORG_TYPE" in
     claude_max) PLAN_LABEL="Max${TIER_SUFFIX:+ $TIER_SUFFIX}" ;;
@@ -85,8 +111,6 @@ if echo "$PROFILE_RESPONSE" | jq -e '.account' &>/dev/null 2>&1; then
     *) PLAN_LABEL="$ORG_TYPE" ;;
   esac
 fi
-
-
 
 # ── Box output ────────────────────────────────────────────────
 BOX_W=42
