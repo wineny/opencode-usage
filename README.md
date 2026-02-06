@@ -1,6 +1,6 @@
 # opencode-usage
 
-OpenCode `/usage` skill — Claude API rate limit(5H/7D)과 계정 정보를 확인합니다.
+OpenCode `/usage-claudecode` skill — Claude API rate limit(5H/7D)과 계정 정보를 확인합니다.
 
 ```
 +- Account ------------------------------+
@@ -14,14 +14,14 @@ OpenCode `/usage` skill — Claude API rate limit(5H/7D)과 계정 정보를 확
 ## 설치
 
 ```bash
-mkdir -p ~/.config/opencode/skills/usage/scripts
+mkdir -p ~/.config/opencode/skills/usage-claudecode/scripts
 
 curl -fsSL https://raw.githubusercontent.com/wineny/opencode-usage/master/scripts/usage.sh \
-  -o ~/.config/opencode/skills/usage/scripts/usage.sh
+  -o ~/.config/opencode/skills/usage-claudecode/scripts/usage.sh
 curl -fsSL https://raw.githubusercontent.com/wineny/opencode-usage/master/SKILL.md \
-  -o ~/.config/opencode/skills/usage/SKILL.md
+  -o ~/.config/opencode/skills/usage-claudecode/SKILL.md
 
-chmod +x ~/.config/opencode/skills/usage/scripts/usage.sh
+chmod +x ~/.config/opencode/skills/usage-claudecode/scripts/usage.sh
 ```
 
 ## 사전 요구사항
@@ -32,7 +32,7 @@ chmod +x ~/.config/opencode/skills/usage/scripts/usage.sh
 
 ## 사용법
 
-OpenCode에서 `/usage` 입력.
+OpenCode에서 `/usage-claudecode` 입력.
 
 ## 토큰 조회 우선순위
 
