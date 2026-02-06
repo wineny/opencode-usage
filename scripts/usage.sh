@@ -6,7 +6,7 @@ set -euo pipefail
 AUTH_FILE="$HOME/.local/share/opencode/auth.json"
 KEYCHAIN_SERVICE="Claude Code-credentials"
 
-# ── JSON parser: python3 (macOS built-in) or jq ──────────────
+# ── JSON parser: python3 → jq → osascript (zero-dep on macOS) ─
 json_get() {
   local json="$1" path="$2"
   if command -v python3 &>/dev/null; then
@@ -14,8 +14,7 @@ json_get() {
 import json,sys
 try:
   d=json.loads(sys.stdin.read())
-  keys='$path'.split('.')
-  for k in keys:
+  for k in '$path'.split('.'):
     if not isinstance(d,dict) or k not in d: sys.exit(0)
     d=d[k]
   if d is None: sys.exit(0)
@@ -25,8 +24,16 @@ except: pass
   elif command -v jq &>/dev/null; then
     echo "$json" | jq -r ".$path // empty" 2>/dev/null
   else
-    echo "python3 또는 jq가 필요합니다." >&2
-    exit 1
+    echo "$json" | osascript -l JavaScript -e '
+ObjC.import("Foundation");
+var data=$.NSFileHandle.fileHandleWithStandardInput.readDataToEndOfFile;
+var str=$.NSString.alloc.initWithDataEncoding(data,4).js;
+try{var d=JSON.parse(str);
+var keys="'"$path"'".split(".");
+for(var i=0;i<keys.length;i++){if(!d||typeof d!=="object")throw 0;d=d[keys[i]];}
+if(d===undefined||d===null)throw 0;
+d;}catch(e){""}
+' 2>/dev/null
   fi
 }
 
