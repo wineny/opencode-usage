@@ -9,11 +9,10 @@ Claude API rate limit 사용량과 계정 정보를 확인하는 커맨드.
 
 ## 실행 방법
 
-아래 셸 스크립트를 실행하고, 출력 결과를 코드블록으로 표시하세요:
+`bash ~/.config/opencode/skills/usage/scripts/usage.sh` 를 실행하세요.
 
-```bash
-bash ~/.config/opencode/skills/usage/scripts/usage.sh
-```
+## 출력 규칙
 
-출력 결과를 그대로 코드블록 안에 넣어 사용자에게 보여주세요.
-스크립트 에러 시에도 에러 메시지를 그대로 전달하세요.
+- 스크립트 실행 결과(stdout)만 코드블록 없이 그대로 사용자에게 전달하세요.
+- 실행 과정, 명령어, 부가 설명을 추가하지 마세요.
+- 에러 발생 시에도 에러 메시지만 그대로 전달하세요.
