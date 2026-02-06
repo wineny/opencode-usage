@@ -26,7 +26,7 @@ chmod +x ~/.config/opencode/skills/usage/scripts/usage.sh
 
 ## 사전 요구사항
 
-- **macOS** (추가 설치 불필요 — python3/jq/osascript 자동 감지)
+- **macOS** (추가 설치 불필요 — python3/jq/osascript 자동 감지, Windows 미지원)
 - **OpenCode 인증**: `opencode auth login` (Anthropic OAuth)
 - 또는 **Claude Code 인증**: `claude login` (macOS Keychain 사용)
 
