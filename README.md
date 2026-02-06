@@ -14,12 +14,12 @@ OpenCode `/usage` skill — Claude API rate limit(5H/7D)과 계정 정보를 확
 ## 설치
 
 ```bash
-mkdir -p ~/.config/opencode/skills/usage/scripts
+mkdir -p ~/.config/opencode/skills/usage/scripts ~/.config/opencode/command
 
 curl -fsSL https://raw.githubusercontent.com/wineny/opencode-usage/master/scripts/usage.sh \
   -o ~/.config/opencode/skills/usage/scripts/usage.sh
-curl -fsSL https://raw.githubusercontent.com/wineny/opencode-usage/master/SKILL.md \
-  -o ~/.config/opencode/skills/usage/SKILL.md
+curl -fsSL https://raw.githubusercontent.com/wineny/opencode-usage/master/command.md \
+  -o ~/.config/opencode/command/usage.md
 
 chmod +x ~/.config/opencode/skills/usage/scripts/usage.sh
 ```
