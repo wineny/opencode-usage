@@ -28,39 +28,25 @@ if [[ -z "$TOKEN" ]]; then
   exit 1
 fi
 
-# ── Anthropic APIs ─────────────────────────────────────────────
+# ── Parallel fetch: usage API + profile API + opencode stats ──
+TMPDIR_USAGE=$(mktemp -d)
+trap 'rm -rf "$TMPDIR_USAGE"' EXIT
+
 AUTH_HEADERS=(-H "Authorization: Bearer $TOKEN" -H "anthropic-beta: oauth-2025-04-20")
 
-API_RESPONSE=$(curl -s --max-time 10 \
-  https://api.anthropic.com/api/oauth/usage \
-  "${AUTH_HEADERS[@]}" 2>/dev/null) || true
+curl -s --max-time 10 https://api.anthropic.com/api/oauth/usage \
+  "${AUTH_HEADERS[@]}" > "$TMPDIR_USAGE/usage.json" 2>/dev/null &
+curl -s --max-time 10 https://api.anthropic.com/api/oauth/profile \
+  "${AUTH_HEADERS[@]}" > "$TMPDIR_USAGE/profile.json" 2>/dev/null &
+wait
 
+# ── Parse usage ───────────────────────────────────────────────
+API_RESPONSE=$(cat "$TMPDIR_USAGE/usage.json" 2>/dev/null)
 API_OK=true
 if [[ -z "$API_RESPONSE" ]] || ! echo "$API_RESPONSE" | jq -e '.five_hour' &>/dev/null; then
   API_OK=false
 fi
 
-PROFILE_RESPONSE=$(curl -s --max-time 10 \
-  https://api.anthropic.com/api/oauth/profile \
-  "${AUTH_HEADERS[@]}" 2>/dev/null) || true
-
-ACCOUNT_EMAIL=""
-PLAN_LABEL=""
-if echo "$PROFILE_RESPONSE" | jq -e '.account' &>/dev/null; then
-  ACCOUNT_EMAIL=$(echo "$PROFILE_RESPONSE" | jq -r '.account.email // empty')
-  ORG_TYPE=$(echo "$PROFILE_RESPONSE" | jq -r '.organization.organization_type // empty')
-  RATE_TIER=$(echo "$PROFILE_RESPONSE" | jq -r '.organization.rate_limit_tier // empty')
-  # "default_claude_max_20x" → "max 20x"
-  TIER_SUFFIX=$(echo "$RATE_TIER" | grep -oE '[0-9]+x$' || true)
-  case "$ORG_TYPE" in
-    claude_max) PLAN_LABEL="Max${TIER_SUFFIX:+ $TIER_SUFFIX}" ;;
-    claude_pro) PLAN_LABEL="Pro" ;;
-    claude_team) PLAN_LABEL="Team" ;;
-    *) PLAN_LABEL="$ORG_TYPE" ;;
-  esac
-fi
-
-# ── Parse API response ────────────────────────────────────────
 relative_time() {
   local iso_ts="$1"
   [[ -z "$iso_ts" ]] && return
@@ -83,20 +69,24 @@ if $API_OK; then
   SEVEN_D_RESET=$(relative_time "$(echo "$API_RESPONSE" | jq -r '.seven_day.resets_at // empty')")
 fi
 
-# ── OpenCode stats ────────────────────────────────────────────
-STATS_OUTPUT=$(opencode stats 2>/dev/null) || STATS_OUTPUT=""
-
-SESSIONS=""
-AVG_TOKENS=""
-
-if [[ -n "$STATS_OUTPUT" ]]; then
-  SESSIONS=$(echo "$STATS_OUTPUT" | grep -E "Sessions" | head -1 | grep -oE '[0-9,]+' | tr -d ',')
-  AVG_TOKENS=$(echo "$STATS_OUTPUT" | grep -E "Avg Tokens/Session" | grep -oE '[0-9]+\.[0-9]+[KMG]')
+# ── Parse profile ─────────────────────────────────────────────
+PROFILE_RESPONSE=$(cat "$TMPDIR_USAGE/profile.json" 2>/dev/null)
+ACCOUNT_EMAIL=""
+PLAN_LABEL=""
+if echo "$PROFILE_RESPONSE" | jq -e '.account' &>/dev/null 2>&1; then
+  ACCOUNT_EMAIL=$(echo "$PROFILE_RESPONSE" | jq -r '.account.email // empty')
+  ORG_TYPE=$(echo "$PROFILE_RESPONSE" | jq -r '.organization.organization_type // empty')
+  RATE_TIER=$(echo "$PROFILE_RESPONSE" | jq -r '.organization.rate_limit_tier // empty')
+  TIER_SUFFIX=$(echo "$RATE_TIER" | grep -oE '[0-9]+x$' || true)
+  case "$ORG_TYPE" in
+    claude_max) PLAN_LABEL="Max${TIER_SUFFIX:+ $TIER_SUFFIX}" ;;
+    claude_pro) PLAN_LABEL="Pro" ;;
+    claude_team) PLAN_LABEL="Team" ;;
+    *) PLAN_LABEL="$ORG_TYPE" ;;
+  esac
 fi
 
-# ── Defaults ──────────────────────────────────────────────────
-SESSIONS=${SESSIONS:-"-"}
-AVG_TOKENS=${AVG_TOKENS:-"-"}
+
 
 # ── Box output ────────────────────────────────────────────────
 BOX_W=42
@@ -140,14 +130,8 @@ if $API_OK; then
   pad "$FIVE_LINE" ""
   pad "$SEVEN_LINE" ""
 
-  hline "-" "+" "+" "Session Stats"
+  hline "-" "+" "+"
 else
-  echo "API 호출 실패. 네트워크를 확인하세요. 세션 통계만 표시합니다."
-  echo ""
-  hline "-" "+" "+" "Session Stats"
+  echo "API 호출 실패. 네트워크를 확인하세요."
 fi
-
-pad "Avg Tokens:     " "${AVG_TOKENS}/session"
-pad "Sessions:       " "$SESSIONS"
-hline "-" "+" "+"
 echo ""

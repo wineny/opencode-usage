@@ -1,33 +1,27 @@
 # opencode-usage
 
-OpenCode `/usage` skill — Claude API rate limit(5H/7D)과 세션 통계를 확인합니다.
+OpenCode `/usage` skill — Claude API rate limit(5H/7D)과 계정 정보를 확인합니다.
 
 ```
 +- Account ------------------------------+
 | support@gpters.org / Max 20x           |
 +- Claude Usage -------------------------+
-| 5H Limit:  37%  (reset: 1h 37m)        |
-| 7D Limit:  56%  (reset: 4d 20h)        |
-+- Session Stats ------------------------+
-| Avg Tokens:     1.7M/session           |
-| Sessions:       668                    |
+| 5H Limit:  49%  (reset: 1h 19m)        |
+| 7D Limit:  58%  (reset: 4d 20h)        |
 +----------------------------------------+
 ```
 
 ## 설치
 
 ```bash
-# 디렉토리 생성
-mkdir -p ~/.config/opencode/skill/usage/scripts
+mkdir -p ~/.config/opencode/skills/usage/scripts
 
-# 파일 다운로드
 curl -fsSL https://raw.githubusercontent.com/wineny/opencode-usage/master/scripts/usage.sh \
-  -o ~/.config/opencode/skill/usage/scripts/usage.sh
+  -o ~/.config/opencode/skills/usage/scripts/usage.sh
 curl -fsSL https://raw.githubusercontent.com/wineny/opencode-usage/master/SKILL.md \
-  -o ~/.config/opencode/skill/usage/SKILL.md
+  -o ~/.config/opencode/skills/usage/SKILL.md
 
-# 실행 권한
-chmod +x ~/.config/opencode/skill/usage/scripts/usage.sh
+chmod +x ~/.config/opencode/skills/usage/scripts/usage.sh
 ```
 
 ## 사전 요구사항
@@ -51,4 +45,3 @@ OpenCode에서 `/usage` 입력.
 |------|------|
 | Account (이메일 / 플랜) | Anthropic `/api/oauth/profile` |
 | 5H / 7D Rate Limit | Anthropic `/api/oauth/usage` |
-| Avg Tokens, Sessions | `opencode stats` |
