@@ -43,17 +43,66 @@ json_has() {
   [[ -n "$val" ]]
 }
 
-# ── OAuth token: try OpenCode auth.json first, then Keychain ──
+# ── OAuth token resolution ────────────────────────────────────
+# Priority: auth.json (valid) → auth.json (refresh) → Keychain
+ANTHROPIC_CLIENT_ID="9d1c250a-e61b-44d9-88ed-5944d1962f5e"
 TOKEN=""
+
+get_keychain_token() {
+  local cred_json
+  cred_json=$(security find-generic-password -s "$KEYCHAIN_SERVICE" -w 2>/dev/null) || true
+  [[ -n "$cred_json" ]] && json_get "$cred_json" "claudeAiOauth.accessToken"
+}
+
+refresh_auth_token() {
+  local auth_json="$1" refresh_token now_ms
+  refresh_token=$(json_get "$auth_json" "anthropic.refresh")
+  [[ -z "$refresh_token" ]] && return 1
+  now_ms=$(python3 -c "import time; print(int(time.time()*1000))")
+  local resp
+  resp=$(curl -s --max-time 10 -X POST https://console.anthropic.com/v1/oauth/token \
+    -H "Content-Type: application/x-www-form-urlencoded" \
+    -d "grant_type=refresh_token&refresh_token=$refresh_token&client_id=$ANTHROPIC_CLIENT_ID" 2>/dev/null)
+  local new_access
+  new_access=$(json_get "$resp" "access_token")
+  [[ -z "$new_access" ]] && return 1
+  local new_refresh expires_in new_expires_ms
+  new_refresh=$(json_get "$resp" "refresh_token")
+  expires_in=$(json_get "$resp" "expires_in")
+  new_expires_ms=$((now_ms + expires_in * 1000))
+  python3 << PYEOF
+import json
+with open('$AUTH_FILE') as f:
+    d = json.load(f)
+d['anthropic']['access'] = '${new_access}'
+d['anthropic']['expires'] = ${new_expires_ms}
+nr = '${new_refresh}'
+if nr:
+    d['anthropic']['refresh'] = nr
+with open('$AUTH_FILE', 'w') as f:
+    json.dump(d, f, indent=2)
+PYEOF
+  echo "$new_access"
+}
+
+# 1) Try auth.json
 if [[ -f "$AUTH_FILE" ]]; then
-  TOKEN=$(json_get "$(cat "$AUTH_FILE")" "anthropic.access")
-fi
-if [[ -z "$TOKEN" ]]; then
-  CRED_JSON=$(security find-generic-password -s "$KEYCHAIN_SERVICE" -w 2>/dev/null) || true
-  if [[ -n "$CRED_JSON" ]]; then
-    TOKEN=$(json_get "$CRED_JSON" "claudeAiOauth.accessToken")
+  AUTH_JSON=$(cat "$AUTH_FILE")
+  EXPIRES_MS=$(json_get "$AUTH_JSON" "anthropic.expires")
+  NOW_MS=$(python3 -c "import time; print(int(time.time()*1000))")
+  if [[ -n "$EXPIRES_MS" ]] && (( EXPIRES_MS > NOW_MS )); then
+    TOKEN=$(json_get "$AUTH_JSON" "anthropic.access")
+  else
+    # Expired → try refresh
+    TOKEN=$(refresh_auth_token "$AUTH_JSON") || true
   fi
 fi
+
+# 2) Fallback to Keychain
+if [[ -z "$TOKEN" ]]; then
+  TOKEN=$(get_keychain_token)
+fi
+
 if [[ -z "$TOKEN" ]]; then
   echo "Claude 인증정보를 찾을 수 없습니다. opencode auth login 또는 claude login 실행 후 다시 시도하세요."
   exit 1
